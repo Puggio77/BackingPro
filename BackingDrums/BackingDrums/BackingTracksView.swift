@@ -1,16 +1,11 @@
-//
-//  BackingTracksView.swift
-//  BackingDrums
-//
-//  Created by Riccardo Puggioni on 07/11/25.
-//
-
 import SwiftUI
+import AVFoundation
 
 struct BackingTracksView: View {
     
     let viewModel = CardViewModel()
     @StateObject private var trackViewModel = TrackCardViewModel()
+    @StateObject private var metronome = Metronome()
     
     @State private var isPlaying = false
     @State private var currentTime: Double = 0.0
@@ -19,13 +14,19 @@ struct BackingTracksView: View {
     @State private var showingTrackPicker = false
     @State private var selectedTrack: Track? = nil
     
+    @State private var showingSettingSheet = false
+    @State private var selectedSetting: String? = nil
+    @State private var tempo: Double = 120
+    @State private var pitch: Int = 0
+    @State private var voiceCount: Int = 0
+    @State private var isClickOn: Bool = false
+    
     var body: some View {
-        
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
                     
-                    // MARK: -- Backing Track (cliccabile)
+                    // MARK: -- Backing Track
                     Button {
                         showingTrackPicker.toggle()
                     } label: {
@@ -39,10 +40,10 @@ struct BackingTracksView: View {
                                         .foregroundColor(.secondary)
                                 )
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(selectedTrack?.SongName ?? "Blues Song 01")
+                                Text(selectedTrack?.SongName ?? "-")
                                     .font(.headline)
                                     .foregroundStyle(.primary)
-                                Text(selectedTrack?.Artist ?? "Blues Artist")
+                                Text(selectedTrack?.Artist ?? "-")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -62,6 +63,7 @@ struct BackingTracksView: View {
                             List(trackViewModel.tracks) { track in
                                 Button {
                                     selectedTrack = track
+                                    tempo = clampTempo(from: track.OriginalTempo)
                                     showingTrackPicker = false
                                 } label: {
                                     VStack(alignment: .leading) {
@@ -87,28 +89,64 @@ struct BackingTracksView: View {
                         
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                             ForEach(viewModel.cards) { card in
-                                VStack(spacing: 6) {
-                                    Text(card.value)
-                                        .font(.title3)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.black)
-                                    Text(card.label)
-                                        .font(.footnote)
-                                        .foregroundColor(.black)
+                                if card.label == "Click" {
+                                    Button {
+                                        isClickOn.toggle()
+                                        if isClickOn {
+                                            metronome.start(bpm: tempo)
+                                        } else {
+                                            metronome.stop()
+                                        }
+                                    } label: {
+                                        VStack(spacing: 6) {
+                                            Text(isClickOn ? "on" : "off")
+                                                .font(.title3)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.black)
+                                            Text("Click")
+                                                .font(.footnote)
+                                                .foregroundColor(.black)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .fill(isClickOn ? Color.green : Color.red.opacity(0.4))
+                                        )
+                                        .shadow(color: Color.black.opacity(0.1), radius: 1, y: 1)
+                                    }
+                                } else {
+                                    Button {
+                                        selectedSetting = card.label
+                                        showingSettingSheet = true
+                                    } label: {
+                                        VStack(spacing: 6) {
+                                            Text(value(for: card.label))
+                                                .font(.title3)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.black)
+                                            Text(card.label)
+                                                .font(.footnote)
+                                                .foregroundColor(.black)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .fill(Color.teal)
+                                        )
+                                        .shadow(color: Color.black.opacity(0.1), radius: 1, y: 1)
+                                    }
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(Color.teal)
-                                )
-                                .shadow(color: Color.black.opacity(0.1), radius: 1, y: 1)
                             }
                         }
                         .padding(.horizontal)
                     }
+                    .sheet(isPresented: $showingSettingSheet) {
+                        settingSheet
+                    }
                     
-                    // MARK: -- Track info 
+                    // MARK: -- Track info
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Track Info")
                             .font(.title2)
@@ -121,11 +159,11 @@ struct BackingTracksView: View {
                                 VStack(alignment: .leading, spacing: 6) {
                                     HStack {
                                         Image(systemName: "metronome")
-                                        Text("Original Tempo: \(selectedTrack?.OriginalTempo ?? "120 BPM")")
+                                        Text("Original Tempo: \(selectedTrack?.OriginalTempo ?? "-")")
                                     }
                                     HStack {
                                         Image(systemName: "music.quarternote.3")
-                                        Text("Time Signature: \(selectedTrack?.TimeSignature ?? "4/4")")
+                                        Text("Time Signature: \(selectedTrack?.TimeSignature ?? "-")")
                                     }
                                 }
                                 Spacer()
@@ -140,9 +178,9 @@ struct BackingTracksView: View {
                         .padding(.horizontal)
                     }
                     
-                    // MARK: -- Music Player (finto)
+                    // MARK: -- Music Player
                     VStack(spacing: 8) {
-                        Text(selectedTrack?.SongName ?? "Song name?")
+                        Text(selectedTrack?.SongName ?? "-")
                             .font(.headline)
                             .foregroundColor(.primary)
                         
@@ -163,7 +201,6 @@ struct BackingTracksView: View {
                                 Image(systemName: "backward.fill")
                                     .font(.title3)
                             }
-                            
                             Button(action: {
                                 isPlaying.toggle()
                             }) {
@@ -171,7 +208,6 @@ struct BackingTracksView: View {
                                     .font(.system(size: 40))
                                     .foregroundColor(.teal)
                             }
-                            
                             Button(action: {}) {
                                 Image(systemName: "forward.fill")
                                     .font(.title3)
@@ -191,6 +227,9 @@ struct BackingTracksView: View {
                 .padding(.top)
             }
             .navigationTitle("Drum Backing Tracks")
+            .onChange(of: tempo) { newTempo in
+                metronome.update(bpm: newTempo)
+            }
         }
     }
     
@@ -199,6 +238,73 @@ struct BackingTracksView: View {
         let minutes = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%d:%02d", minutes, secs)
+    }
+    
+    func value(for label: String) -> String {
+        switch label {
+        case "Tempo":
+            return "\(Int(tempo))"
+        case "Pitch":
+            return "\(pitch)"
+        case "Voice Count":
+            return "\(voiceCount) bars"
+        default:
+            return "-"
+        }
+    }
+    
+    func clampTempo(from originalTempoString: String) -> Double {
+        let digits = originalTempoString
+            .split(separator: " ")
+            .compactMap { Double($0) }
+            .first ?? 120
+        return min(200, max(60, digits))
+    }
+    
+    var settingSheet: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                if selectedSetting == "Tempo" {
+                    VStack {
+                        Text("Tempo: \(Int(tempo)) BPM")
+                            .font(.headline)
+                        Slider(value: $tempo, in: 60...200, step: 1)
+                    }
+                    .padding()
+                } else if selectedSetting == "Pitch" {
+                    VStack {
+                        Text("Pitch")
+                            .font(.headline)
+                        Picker("Pitch", selection: $pitch) {
+                            ForEach(-12...12, id: \.self) { value in
+                                Text("\(value)").tag(value)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                    }
+                    .padding()
+                } else if selectedSetting == "Voice Count" {
+                    VStack {
+                        Text("Voice Count")
+                            .font(.headline)
+                        Picker("Voice Count", selection: $voiceCount) {
+                            ForEach(0...4, id: \.self) { i in
+                                Text("\(i) bars").tag(i)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                    }
+                    .padding()
+                }
+                Spacer()
+            }
+            .navigationTitle(selectedSetting ?? "Settings")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showingSettingSheet = false }
+                }
+            }
+        }
     }
 }
 
