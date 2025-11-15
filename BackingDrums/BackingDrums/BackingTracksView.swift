@@ -14,6 +14,9 @@ struct BackingTracksView: View {
     @StateObject private var trackViewModel = TrackCardViewModel()
     @StateObject private var metronome = Metronome()
     
+    // AUDIO PLAYER
+    @StateObject private var audioPlayer = AudioPlayerManager()
+    
     @State private var isPlaying = false
     @State private var currentTime: Double = 0.0
     @State private var totalTime: Double = 180.0
@@ -45,6 +48,7 @@ struct BackingTracksView: View {
                                         .font(.title2)
                                         .foregroundColor(.secondary)
                                 )
+                            
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(selectedTrack?.SongName ?? "-")
                                     .font(.headline)
@@ -54,6 +58,7 @@ struct BackingTracksView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .padding(.leading, 4)
+                            
                             Spacer()
                         }
                         .padding()
@@ -68,8 +73,21 @@ struct BackingTracksView: View {
                         NavigationView {
                             List(trackViewModel.tracks) { track in
                                 Button {
+                                    
                                     selectedTrack = track
                                     tempo = clampTempo(from: track.OriginalTempo)
+                                    
+                                    // CARICA AUDIO SOLO PER BLUES 01
+                                    if track.SongName == "Blues 01" {
+                                        audioPlayer.loadWav(named: "Blues Drumless Backing Track")
+                                        totalTime = audioPlayer.duration
+                                        currentTime = 0
+                                    } else {
+                                        audioPlayer.stop()
+                                        currentTime = 0
+                                        totalTime = 180
+                                    }
+                                    
                                     showingTrackPicker = false
                                 } label: {
                                     VStack(alignment: .leading) {
@@ -96,6 +114,7 @@ struct BackingTracksView: View {
                         VStack(alignment: .leading, spacing: 6) {
                             HStack(alignment: .top) {
                                 VStack(alignment: .leading, spacing: 6) {
+                                    
                                     HStack {
                                         Image(systemName: "metronome")
                                         Text("Original Tempo: ")
@@ -103,6 +122,7 @@ struct BackingTracksView: View {
                                             .fontWeight(.heavy)
                                         Text("\(selectedTrack?.OriginalTempo ?? "-")")
                                     }
+                                    
                                     HStack {
                                         Image(systemName: "music.quarternote.3")
                                         Text("Time Signature: ")
@@ -138,7 +158,6 @@ struct BackingTracksView: View {
                         }
                         .padding(.horizontal)
                         
-                        // Summary cards grid
                         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                             
                             VStack(spacing: 6) {
@@ -151,10 +170,7 @@ struct BackingTracksView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.teal.opacity(0.7))
-                            )
+                            .background(RoundedRectangle(cornerRadius: 16).fill(Color.teal.opacity(0.7)))
                             
                             VStack(spacing: 6) {
                                 Text("\(pitch)")
@@ -166,10 +182,7 @@ struct BackingTracksView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.teal.opacity(0.7))
-                            )
+                            .background(RoundedRectangle(cornerRadius: 16).fill(Color.teal.opacity(0.7)))
                             
                             VStack(spacing: 6) {
                                 Text("\(voiceCount) bars")
@@ -181,10 +194,7 @@ struct BackingTracksView: View {
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.teal.opacity(0.7))
-                            )
+                            .background(RoundedRectangle(cornerRadius: 16).fill(Color.teal.opacity(0.7)))
                             
                             VStack(spacing: 6) {
                                 Text(isClickOn ? "on" : "off")
@@ -214,35 +224,64 @@ struct BackingTracksView: View {
                             .foregroundColor(.primary)
                         
                         VStack(spacing: 4) {
-                            Slider(value: $currentTime, in: 0...totalTime)
+                            Slider(
+                                value: $currentTime,
+                                in: 0...totalTime,
+                                onEditingChanged: { editing in
+                                    if !editing {
+                                        audioPlayer.seek(to: currentTime)
+                                    }
+                                }
+                            )
                             HStack {
-                                Text(formatTime(currentTime))
-                                    .font(.caption2)
+                                Text(formatTime(currentTime)).font(.caption2)
                                 Spacer()
-                                Text(formatTime(totalTime))
-                                    .font(.caption2)
+                                Text(formatTime(totalTime)).font(.caption2)
                             }
                         }
                         .padding(.horizontal, 16)
                         
                         HStack(spacing: 30) {
-                            Button(action: {}) {
+                            
+                            Button(action: {
+                                let newTime = max(0, currentTime - 5)
+                                currentTime = newTime
+                                audioPlayer.seek(to: newTime)
+                            }) {
                                 Image(systemName: "backward.fill")
                                     .font(.title3)
                             }
+                            
                             Button(action: {
-                                isPlaying.toggle()
+                                if audioPlayer.isPlaying {
+                                    audioPlayer.pause()
+                                    metronome.stop()
+                                } else {
+                                    audioPlayer.play()
+                                    
+                                    if isClickOn {
+                                        metronome.start(bpm: tempo)
+                                    }
+                                }
+                                
+                                isPlaying = audioPlayer.isPlaying
                             }) {
-                                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                                Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                                     .font(.system(size: 40))
                                     .foregroundColor(.teal)
                             }
-                            Button(action: {}) {
+                            
+                            Button(action: {
+                                let newTime = min(totalTime, currentTime + 5)
+                                currentTime = newTime
+                                audioPlayer.seek(to: newTime)
+                            }) {
                                 Image(systemName: "forward.fill")
                                     .font(.title3)
                             }
                         }
                         .padding(.vertical, 4)
+                        
                     }
                     .padding(.vertical, 10)
                     .background(
@@ -255,9 +294,45 @@ struct BackingTracksView: View {
                 }
                 .padding(.top)
             }
-            .navigationTitle("Drum Backing Tracks")
+            .navigationTitle("Backing Tracks")
+            
+            // RATE + BPM SYNC
             .onChange(of: tempo) { _, newTempo in
-                metronome.update(bpm: newTempo)
+                
+                if let selectedTrack {
+                    let original = clampTempo(from: selectedTrack.OriginalTempo)
+                    audioPlayer.changeRate(originalTempo: original, newTempo: newTempo)
+                }
+                
+                if audioPlayer.isPlaying && isClickOn {
+                    metronome.update(bpm: newTempo)
+                }
+            }
+            
+            // PITCH
+            .onChange(of: pitch) { _, newPitch in
+                audioPlayer.changePitch(semitones: newPitch)
+            }
+            
+            // CLICK TOGGLE (non avvia più il metronomo autonomamente)
+            .onChange(of: isClickOn) { _, newValue in
+                if audioPlayer.isPlaying {
+                    if newValue {
+                        metronome.start(bpm: tempo)
+                    } else {
+                        metronome.stop()
+                    }
+                } else {
+                    metronome.stop()
+                }
+            }
+            
+            // SYNC SLIDER
+            .onReceive(audioPlayer.$currentTime) { time in
+                currentTime = time
+            }
+            .onReceive(audioPlayer.$duration) { duration in
+                totalTime = duration
             }
         }
     }
@@ -316,10 +391,6 @@ struct BackingTracksView: View {
                 
                 Toggle("Metronome Click", isOn: $isClickOn)
                     .padding(.horizontal)
-                    .onChange(of: isClickOn) { _, newValue in
-                        if newValue { metronome.start(bpm: tempo) }
-                        else { metronome.stop() }
-                    }
                 
                 Spacer()
             }
